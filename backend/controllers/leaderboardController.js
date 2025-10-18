@@ -1,4 +1,5 @@
-const pool = require('../config/database');
+const { v4: uuidv4 } = require('uuid');
+const { pool } = require('../config/database-postgres');
 
 // Submit a new score
 const submitScore = async (req, res) => {
@@ -19,14 +20,17 @@ const submitScore = async (req, res) => {
       });
     }
 
+    // Generate unique ID for the leaderboard entry
+    const id = uuidv4();
+
     // Insert the score into the database
     const query = `
-      INSERT INTO leaderboard (user_id, lap_time, track_name, created_at)
-      VALUES ($1, $2, $3, NOW())
+      INSERT INTO leaderboard (id, user_id, lap_time, track_name, created_at)
+      VALUES ($1, $2, $3, $4, NOW())
       RETURNING *
     `;
     
-    const result = await pool.query(query, [userId, lap_time, track_name]);
+    const result = await pool.query(query, [id, userId, lap_time, track_name]);
 
     res.status(201).json({
       message: 'Score submitted successfully',
