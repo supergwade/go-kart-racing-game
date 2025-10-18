@@ -1,34 +1,26 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import axios from 'axios';
-import './GamePage.css';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 function GamePage({ user }) {
   const containerRef = useRef(null);
   const navigate = useNavigate();
-  
   const [gameState, setGameState] = useState({
     speed: 0,
-    currentLap: 1,
-    totalLaps: 3,
-    lapTimes: [],
-    bestLapTime: null,
-    totalTime: 0,
-    checkpointsPassed: 0,
-    isRacing: true,
-    raceFinished: false
+    time: 0,
+    lapTime: 0,
+    isRacing: false
   });
 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Scene Setup
+    // Three.js Scene Setup
     const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x87ceeb, 50, 200);
+    scene.background = new THREE.Color(0x87ceeb); // Sky blue
     
     const camera = new THREE.PerspectiveCamera(
       75,
@@ -36,561 +28,311 @@ function GamePage({ user }) {
       0.1,
       1000
     );
+    camera.position.set(0, 5, 10);
+    camera.lookAt(0, 0, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     containerRef.current.appendChild(renderer.domElement);
 
     // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
 
-    const sunLight = new THREE.DirectionalLight(0xfff5e6, 1);
-    sunLight.position.set(100, 100, 50);
-    sunLight.castShadow = true;
-    sunLight.shadow.camera.left = -100;
-    sunLight.shadow.camera.right = 100;
-    sunLight.shadow.camera.top = 100;
-    sunLight.shadow.camera.bottom = -100;
-    sunLight.shadow.mapSize.width = 2048;
-    sunLight.shadow.mapSize.height = 2048;
-    scene.add(sunLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(50, 50, 50);
+    directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = 2048;
+    directionalLight.shadow.mapSize.height = 2048;
+    scene.add(directionalLight);
 
-    // Sky
-    const skyGeometry = new THREE.SphereGeometry(500, 32, 32);
-    const skyMaterial = new THREE.MeshBasicMaterial({
-      color: 0x87ceeb,
-      side: THREE.BackSide
+    // Create Track (Oval Shape)
+    const trackGroup = new THREE.Group();
+    
+    // Outer track curve
+    const outerCurve = new THREE.EllipseCurve(
+      0, 0,
+      20, 10,
+      0, Math.PI * 2,
+      false,
+      0
+    );
+    
+    const outerPoints = outerCurve.getPoints(200);
+    const outerGeometry = new THREE.BufferGeometry().setFromPoints(outerPoints);
+
+    // Track surface
+    const trackShape = new THREE.Shape();
+    trackShape.ellipse(20, 10, 20, 10);
+    const holes = [];
+    const holeShape = new THREE.Path();
+    holeShape.ellipse(0, 0, 18, 8);
+    holes.push(holeShape);
+    trackShape.holes = holes;
+
+    const extrudeSettings = {
+      depth: 0.5,
+      bevelEnabled: true,
+      bevelThickness: 0.1,
+      bevelSize: 0.1,
+      bevelSegments: 3
+    };
+
+    const trackGeometry = new THREE.ExtrudeGeometry(trackShape, extrudeSettings);
+    const trackMaterial = new THREE.MeshStandardMaterial({
+      color: 0x333333,
+      roughness: 0.7,
+      metalness: 0.1
     });
-    const sky = new THREE.Mesh(skyGeometry, skyMaterial);
-    scene.add(sky);
+    const trackMesh = new THREE.Mesh(trackGeometry, trackMaterial);
+    trackMesh.receiveShadow = true;
+    trackMesh.castShadow = true;
+    trackGroup.add(trackMesh);
 
-    // Ground
-    const groundGeometry = new THREE.PlaneGeometry(400, 400);
-    const groundTexture = createGrassTexture();
-    const groundMaterial = new THREE.MeshLambertMaterial({ 
-      map: groundTexture,
-      side: THREE.DoubleSide 
+    // Track lines (dashed center line)
+    const lineGeometry = new THREE.BufferGeometry();
+    const linePoints = [];
+    for (let i = 0; i < 200; i++) {
+      const angle = (i / 200) * Math.PI * 2;
+      const x = Math.cos(angle) * 19;
+      const y = Math.sin(angle) * 9;
+      linePoints.push(new THREE.Vector3(x, 0.3, y));
+    }
+    lineGeometry.setFromPoints(linePoints);
+    const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffff00 });
+    const centerLine = new THREE.Line(lineGeometry, lineMaterial);
+    trackGroup.add(centerLine);
+
+    // Finish line markers
+    const finishMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+    const finishGeometry = new THREE.BoxGeometry(3, 0.5, 0.5);
+    const finishLine = new THREE.Mesh(finishGeometry, finishMaterial);
+    finishLine.position.set(0, 0.3, 20);
+    finishLine.receiveShadow = true;
+    trackGroup.add(finishLine);
+
+    scene.add(trackGroup);
+
+    // Create Go-Kart
+    const kartGroup = new THREE.Group();
+    
+    // Kart body
+    const bodyGeometry = new THREE.BoxGeometry(1.2, 0.8, 2.5);
+    const bodyMaterial = new THREE.MeshStandardMaterial({
+      color: 0xff0000,
+      metalness: 0.6,
+      roughness: 0.4
+    });
+    const kartBody = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    kartBody.position.y = 0.5;
+    kartBody.castShadow = true;
+    kartBody.receiveShadow = true;
+    kartGroup.add(kartBody);
+
+    // Wheels
+    const wheelGeometry = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 16);
+    const wheelMaterial = new THREE.MeshStandardMaterial({
+      color: 0x222222,
+      metalness: 0.3
+    });
+
+    const wheelPositions = [
+      [-0.6, 0.4, 0.8],
+      [0.6, 0.4, 0.8],
+      [-0.6, 0.4, -0.8],
+      [0.6, 0.4, -0.8]
+    ];
+
+    const wheels = [];
+    wheelPositions.forEach(pos => {
+      const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.set(...pos);
+      wheel.castShadow = true;
+      wheel.receiveShadow = true;
+      kartGroup.add(wheel);
+      wheels.push(wheel);
+    });
+
+    // Windshield
+    const windshieldGeometry = new THREE.BoxGeometry(1, 0.6, 0.3);
+    const windshieldMaterial = new THREE.MeshStandardMaterial({
+      color: 0x4488ff,
+      transparent: true,
+      opacity: 0.6
+    });
+    const windshield = new THREE.Mesh(windshieldGeometry, windshieldMaterial);
+    windshield.position.set(0, 1.2, 0);
+    windshield.castShadow = true;
+    kartGroup.add(windshield);
+
+    kartGroup.position.set(0, 0, 15);
+    scene.add(kartGroup);
+
+    // Ground/Environment
+    const groundGeometry = new THREE.PlaneGeometry(100, 100);
+    const groundMaterial = new THREE.MeshStandardMaterial({
+      color: 0x90ee90,
+      roughness: 0.9
     });
     const ground = new THREE.Mesh(groundGeometry, groundMaterial);
     ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -1;
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // Create Mountains in Background
-    createMountains(scene);
+    // Game Variables
+    let speed = 0;
+    let angle = 0;
+    let raceTime = 0;
+    let lapStartTime = null;
+    let hasStarted = false;
+    let raceStarted = false;
 
-    // Create Race Track
-    const { track, checkpoints, startLine } = createRaceTrack(scene);
-
-    // Load Kart Model
-    let kart = null;
-    let kartLoaded = false;
-    
-    const loader = new GLTFLoader();
-    loader.load(
-      '/racing_kart_concept.glb',
-      (gltf) => {
-        kart = gltf.scene;
-        kart.scale.set(0.5, 0.5, 0.5);
-        kart.position.set(0, 0.3, 0);
-        kart.castShadow = true;
-        kart.traverse((child) => {
-          if (child.isMesh) {
-            child.castShadow = true;
-          }
-        });
-        scene.add(kart);
-        kartLoaded = true;
-        console.log('Kart loaded successfully!');
-      },
-      (progress) => {
-        console.log('Loading kart...', (progress.loaded / progress.total * 100) + '%');
-      },
-      (error) => {
-        console.error('Error loading kart:', error);
-        // Fallback to simple kart if model fails
-        kart = createFallbackKart();
-        scene.add(kart);
-        kartLoaded = true;
-      }
-    );
-
-    // Game State
-    let velocity = new THREE.Vector3();
-    let kartRotation = 0;
-    const maxSpeed = 0.5;
-    const acceleration = 0.02;
-    const friction = 0.98;
-    const turnSpeed = 0.05;
-
-    let currentCheckpoint = 0;
-    let lapStartTime = Date.now();
-    let raceStartTime = Date.now();
-    let currentLap = 1;
-    const totalLaps = 3;
-    let lapTimes = [];
-    let bestLapTime = null;
-
-    // Controls
+    // Input handling
     const keys = {};
-    window.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
-    window.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
-
-    // Camera Follow
-    function updateCamera() {
-      if (!kart) return;
-      
-      const cameraOffset = new THREE.Vector3(
-        Math.sin(kartRotation) * 8,
-        5,
-        Math.cos(kartRotation) * 8
-      );
-      
-      camera.position.copy(kart.position).add(cameraOffset);
-      camera.lookAt(kart.position);
-    }
-
-    // Check Lap Progress
-    function checkLapProgress() {
-      if (!kart) return;
-
-      const kartPos = kart.position;
-      const nextCheckpoint = checkpoints[currentCheckpoint];
-      
-      const distance = kartPos.distanceTo(nextCheckpoint.position);
-      
-      if (distance < 5) {
-        currentCheckpoint++;
-        
-        // Completed a lap
-        if (currentCheckpoint >= checkpoints.length) {
-          currentCheckpoint = 0;
-          
-          const lapTime = Date.now() - lapStartTime;
-          lapTimes.push(lapTime);
-          
-          if (!bestLapTime || lapTime < bestLapTime) {
-            bestLapTime = lapTime;
-          }
-          
-          lapStartTime = Date.now();
-          currentLap++;
-          
-          // Race finished
-          if (currentLap > totalLaps) {
-            finishRace();
-          }
-        }
-        
-        updateGameState();
+    window.addEventListener('keydown', (e) => {
+      keys[e.key.toLowerCase()] = true;
+      if (e.key === ' ' && !raceStarted) {
+        raceStarted = true;
+        lapStartTime = Date.now();
+        setGameState(s => ({ ...s, isRacing: true }));
       }
-    }
+    });
+    window.addEventListener('keyup', (e) => {
+      keys[e.key.toLowerCase()] = false;
+    });
 
-    function updateGameState() {
-      const speed = velocity.length() * 100;
-      const totalTime = Date.now() - raceStartTime;
-      
-      setGameState({
-        speed: Math.round(speed),
-        currentLap: Math.min(currentLap, totalLaps),
-        totalLaps: totalLaps,
-        lapTimes: lapTimes,
-        bestLapTime: bestLapTime,
-        totalTime: totalTime,
-        checkpointsPassed: currentCheckpoint,
-        isRacing: currentLap <= totalLaps,
-        raceFinished: currentLap > totalLaps
-      });
-    }
-
-    function finishRace() {
-      const totalTime = Date.now() - raceStartTime;
-      console.log('Race finished!', {
-        totalTime,
-        lapTimes,
-        bestLapTime
-      });
-      
-      // Could submit score to backend here
-      // submitScore(totalTime);
-    }
-
-    // Animation Loop
-    function animate() {
+    // Animation loop
+    const animate = () => {
       requestAnimationFrame(animate);
 
-      if (kart && kartLoaded) {
-        // Controls
-        if (keys['w'] || keys['arrowup']) {
-          velocity.x -= Math.sin(kartRotation) * acceleration;
-          velocity.z -= Math.cos(kartRotation) * acceleration;
-        }
-        if (keys['s'] || keys['arrowdown']) {
-          velocity.x += Math.sin(kartRotation) * acceleration * 0.5;
-          velocity.z += Math.cos(kartRotation) * acceleration * 0.5;
-        }
-        if (keys['a'] || keys['arrowleft']) {
-          kartRotation += turnSpeed;
-        }
-        if (keys['d'] || keys['arrowright']) {
-          kartRotation -= turnSpeed;
+      // Game logic
+      if (raceStarted) {
+        // Acceleration/Deceleration
+        if (keys['arrowup'] || keys['w']) {
+          speed = Math.min(speed + 0.15, 1.5);
+        } else {
+          speed *= 0.95;
         }
 
-        // Apply friction
-        velocity.multiplyScalar(friction);
-
-        // Limit speed
-        if (velocity.length() > maxSpeed) {
-          velocity.setLength(maxSpeed);
+        // Steering
+        if (keys['arrowleft'] || keys['a']) {
+          angle += 0.08;
+        }
+        if (keys['arrowright'] || keys['d']) {
+          angle -= 0.08;
         }
 
-        // Update kart position
-        kart.position.add(velocity);
-        kart.rotation.y = kartRotation;
+        // Update position
+        const radius = Math.sqrt(kartGroup.position.x ** 2 + kartGroup.position.z ** 2);
+        const currentAngle = Math.atan2(kartGroup.position.z, kartGroup.position.x);
+        const newAngle = currentAngle + speed * 0.01;
+        
+        const trackRadius = 20;
+        kartGroup.position.x = Math.cos(newAngle) * (trackRadius - 3) * (1 - Math.abs(Math.sin(angle)) * 0.5);
+        kartGroup.position.z = Math.sin(newAngle) * (trackRadius - 7) * (1 - Math.abs(Math.sin(angle)) * 0.5);
 
-        // Keep kart on ground
-        kart.position.y = 0.3;
+        kartGroup.rotation.y = angle;
 
-        // Check boundaries (simple circular boundary)
-        const distanceFromCenter = Math.sqrt(
-          kart.position.x ** 2 + kart.position.z ** 2
-        );
-        if (distanceFromCenter > 45) {
-          // Bounce back
-          const angle = Math.atan2(kart.position.z, kart.position.x);
-          kart.position.x = Math.cos(angle) * 45;
-          kart.position.z = Math.sin(angle) * 45;
-          velocity.multiplyScalar(-0.3);
+        // Rotate wheels
+        wheels.forEach(wheel => {
+          wheel.rotation.x += speed * 0.05;
+        });
+
+        // Update time
+        const currentTime = (Date.now() - lapStartTime) / 1000;
+        setGameState(s => ({
+          ...s,
+          speed: (speed * 100).toFixed(0),
+          lapTime: currentTime.toFixed(2)
+        }));
+
+        // Check finish line (simplified)
+        if (kartGroup.position.z > 18 && raceTime === 0 && lapStartTime !== null) {
+          raceTime = currentTime;
+          handleRaceEnd(currentTime);
         }
-
-        updateCamera();
-        checkLapProgress();
-        updateGameState();
       }
 
+      // Camera follow kart
+      const cameraDistance = 10;
+      const cameraHeight = 5;
+      camera.position.x = kartGroup.position.x + Math.cos(angle + Math.PI) * cameraDistance;
+      camera.position.y = kartGroup.position.y + cameraHeight;
+      camera.position.z = kartGroup.position.z + Math.sin(angle + Math.PI) * cameraDistance;
+      camera.lookAt(kartGroup.position.x, kartGroup.position.y + 1, kartGroup.position.z);
+
       renderer.render(scene, camera);
-    }
+    };
+
+    const handleRaceEnd = async (finalTime) => {
+      const token = localStorage.getItem('token');
+      
+      try {
+        await axios.post(
+          `${API_URL}/leaderboard/submit`,
+          { lapTime: finalTime, trackName: 'Main Track' },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        alert(`🏁 Race finished! Your time: ${finalTime.toFixed(2)}s`);
+        navigate('/leaderboard');
+      } catch (err) {
+        console.error('Error submitting score:', err);
+      }
+    };
 
     animate();
 
-    // Window Resize
-    function handleResize() {
+    // Handle window resize
+    const handleResize = () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
-    }
+    };
+
     window.addEventListener('resize', handleResize);
 
-    // Cleanup
     return () => {
       window.removeEventListener('resize', handleResize);
-      window.removeEventListener('keydown', () => {});
-      window.removeEventListener('keyup', () => {});
-      if (containerRef.current && renderer.domElement) {
-        containerRef.current.removeChild(renderer.domElement);
-      }
       renderer.dispose();
+      containerRef.current?.removeChild(renderer.domElement);
     };
-  }, [user]);
-
-  // Helper function to format time
-  function formatTime(ms) {
-    const seconds = Math.floor(ms / 1000);
-    const milliseconds = Math.floor((ms % 1000) / 10);
-    return `${seconds}.${milliseconds.toString().padStart(2, '0')}s`;
-  }
+  }, [navigate]);
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100vh', overflow: 'hidden' }}>
-      <div ref={containerRef} />
-      
-      {/* Race Dashboard */}
-      <div style={{
-        position: 'absolute',
-        top: 20,
-        left: 20,
-        background: 'rgba(0, 0, 0, 0.7)',
-        color: 'white',
-        padding: '20px',
-        borderRadius: '10px',
-        fontFamily: 'Arial, sans-serif',
-        minWidth: '250px'
-      }}>
-        <h2 style={{ margin: '0 0 15px 0', fontSize: '24px' }}>🏎️ Go-Kart Racing</h2>
-        
-        <div style={{ marginBottom: '10px' }}>
-          <strong>Player:</strong> {user?.username || 'Demo Player'}
-        </div>
-        
-        <div style={{ marginBottom: '10px', fontSize: '20px' }}>
-          <strong>Speed:</strong> <span style={{ color: '#00ff00' }}>{gameState.speed} km/h</span>
-        </div>
-        
-        <div style={{ marginBottom: '10px', fontSize: '18px' }}>
-          <strong>Lap:</strong> {gameState.currentLap} / {gameState.totalLaps}
-        </div>
-        
-        <div style={{ marginBottom: '10px' }}>
-          <strong>Total Time:</strong> {formatTime(gameState.totalTime)}
-        </div>
-        
-        {gameState.bestLapTime && (
-          <div style={{ marginBottom: '10px', color: '#ffd700' }}>
-            <strong>Best Lap:</strong> {formatTime(gameState.bestLapTime)}
+    <div ref={containerRef} style={{ width: '100%', height: '100vh', overflow: 'hidden' }}>
+      <div className="game-ui">
+        <div>🏎️ Go-Kart Racing</div>
+        <div style={{ fontSize: '14px', marginTop: '8px' }}>Player: {user?.username}</div>
+      </div>
+
+      <div className="game-timer">
+        {gameState.isRacing ? gameState.lapTime : '0.00'} s
+      </div>
+
+      <div className="game-speed">
+        Speed: {gameState.speed} %
+      </div>
+
+      <div className="game-controls">
+        {!gameState.isRacing ? (
+          <div style={{ background: '#ffff00', color: '#000', padding: '10px', borderRadius: '6px' }}>
+            <strong>Press SPACE to Start!</strong>
           </div>
-        )}
-        
-        {gameState.lapTimes.length > 0 && (
-          <div style={{ marginTop: '15px', borderTop: '1px solid #666', paddingTop: '10px' }}>
-            <strong>Lap Times:</strong>
-            {gameState.lapTimes.map((time, index) => (
-              <div key={index} style={{ fontSize: '14px' }}>
-                Lap {index + 1}: {formatTime(time)}
-              </div>
-            ))}
-          </div>
-        )}
-        
-        {gameState.raceFinished && (
-          <div style={{ 
-            marginTop: '15px', 
-            padding: '10px', 
-            background: '#ffd700',
-            color: '#000',
-            borderRadius: '5px',
-            textAlign: 'center',
-            fontWeight: 'bold'
-          }}>
-            🏁 RACE FINISHED! 🏁
+        ) : (
+          <div>
+            <div>↑/W - Accelerate</div>
+            <div>↓/S - Brake</div>
+            <div>←/A - Turn Left</div>
+            <div>→/D - Turn Right</div>
           </div>
         )}
       </div>
-
-      {/* Controls */}
-      <div style={{
-        position: 'absolute',
-        bottom: 20,
-        right: 20,
-        background: 'rgba(0, 0, 0, 0.7)',
-        color: 'white',
-        padding: '15px',
-        borderRadius: '10px',
-        fontSize: '14px'
-      }}>
-        <div><strong>Controls:</strong></div>
-        <div>↑/W - Accelerate</div>
-        <div>↓/S - Brake</div>
-        <div>←/A - Turn Left</div>
-        <div>→/D - Turn Right</div>
-      </div>
-
-      {/* Back Button */}
-      <button
-        onClick={() => navigate('/dashboard')}
-        style={{
-          position: 'absolute',
-          top: 20,
-          right: 20,
-          padding: '10px 20px',
-          background: '#ff4444',
-          color: 'white',
-          border: 'none',
-          borderRadius: '5px',
-          cursor: 'pointer',
-          fontSize: '16px',
-          fontWeight: 'bold'
-        }}
-      >
-        Exit Race
-      </button>
     </div>
   );
-}
-
-// Helper Functions
-
-function createGrassTexture() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext('2d');
-  
-  // Base grass color
-  ctx.fillStyle = '#4a7c4e';
-  ctx.fillRect(0, 0, 512, 512);
-  
-  // Add some variation
-  for (let i = 0; i < 5000; i++) {
-    const x = Math.random() * 512;
-    const y = Math.random() * 512;
-    const shade = Math.random() * 40 - 20;
-    ctx.fillStyle = `rgb(${74 + shade}, ${124 + shade}, ${78 + shade})`;
-    ctx.fillRect(x, y, 2, 2);
-  }
-  
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(20, 20);
-  return texture;
-}
-
-function createMountains(scene) {
-  for (let i = 0; i < 8; i++) {
-    const angle = (i / 8) * Math.PI * 2;
-    const distance = 150 + Math.random() * 50;
-    
-    const geometry = new THREE.ConeGeometry(20 + Math.random() * 15, 40 + Math.random() * 30, 4);
-    const material = new THREE.MeshLambertMaterial({ color: 0x8b7355 });
-    const mountain = new THREE.Mesh(geometry, material);
-    
-    mountain.position.x = Math.cos(angle) * distance;
-    mountain.position.z = Math.sin(angle) * distance;
-    mountain.position.y = 20;
-    mountain.rotation.y = Math.random() * Math.PI;
-    
-    scene.add(mountain);
-  }
-}
-
-function createRaceTrack(scene) {
-  const trackRadius = 40;
-  const trackWidth = 10;
-  const numSegments = 64;
-  
-  // Track surface
-  const trackShape = new THREE.Shape();
-  for (let i = 0; i <= numSegments; i++) {
-    const angle = (i / numSegments) * Math.PI * 2;
-    const x = Math.cos(angle) * (trackRadius + trackWidth / 2);
-    const z = Math.sin(angle) * (trackRadius + trackWidth / 2);
-    if (i === 0) trackShape.moveTo(x, z);
-    else trackShape.lineTo(x, z);
-  }
-  
-  const holePath = new THREE.Path();
-  for (let i = 0; i <= numSegments; i++) {
-    const angle = (i / numSegments) * Math.PI * 2;
-    const x = Math.cos(angle) * (trackRadius - trackWidth / 2);
-    const z = Math.sin(angle) * (trackRadius - trackWidth / 2);
-    if (i === 0) holePath.moveTo(x, z);
-    else holePath.lineTo(x, z);
-  }
-  trackShape.holes.push(holePath);
-  
-  const trackGeometry = new THREE.ShapeGeometry(trackShape);
-  const trackMaterial = new THREE.MeshLambertMaterial({ color: 0x404040, side: THREE.DoubleSide });
-  const track = new THREE.Mesh(trackGeometry, trackMaterial);
-  track.rotation.x = -Math.PI / 2;
-  track.position.y = 0.1;
-  track.receiveShadow = true;
-  scene.add(track);
-  
-  // Add track markings
-  for (let i = 0; i < numSegments; i += 2) {
-    const angle = (i / numSegments) * Math.PI * 2;
-    const x = Math.cos(angle) * trackRadius;
-    const z = Math.sin(angle) * trackRadius;
-    
-    const markingGeometry = new THREE.BoxGeometry(1, 0.05, 0.5);
-    const markingMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const marking = new THREE.Mesh(markingGeometry, markingMaterial);
-    marking.position.set(x, 0.2, z);
-    marking.rotation.y = angle;
-    scene.add(marking);
-  }
-  
-  // Barriers
-  for (let side = 0; side < 2; side++) {
-    const radius = side === 0 ? trackRadius + trackWidth / 2 + 1 : trackRadius - trackWidth / 2 - 1;
-    
-    for (let i = 0; i < numSegments; i++) {
-      const angle = (i / numSegments) * Math.PI * 2;
-      const x = Math.cos(angle) * radius;
-      const z = Math.sin(angle) * radius;
-      
-      const barrierGeometry = new THREE.BoxGeometry(1, 2, 0.5);
-      const barrierMaterial = new THREE.MeshLambertMaterial({ 
-        color: i % 2 === 0 ? 0xff0000 : 0xffffff 
-      });
-      const barrier = new THREE.Mesh(barrierGeometry, barrierMaterial);
-      barrier.position.set(x, 1, z);
-      barrier.rotation.y = angle;
-      barrier.castShadow = true;
-      scene.add(barrier);
-    }
-  }
-  
-  // Checkpoints (invisible)
-  const checkpoints = [];
-  const numCheckpoints = 8;
-  for (let i = 0; i < numCheckpoints; i++) {
-    const angle = (i / numCheckpoints) * Math.PI * 2;
-    const checkpoint = {
-      position: new THREE.Vector3(
-        Math.cos(angle) * trackRadius,
-        0,
-        Math.sin(angle) * trackRadius
-      )
-    };
-    checkpoints.push(checkpoint);
-  }
-  
-  // Start/Finish line
-  const startLineGeometry = new THREE.PlaneGeometry(trackWidth, 1);
-  const startLineMaterial = new THREE.MeshBasicMaterial({ 
-    color: 0xffffff,
-    side: THREE.DoubleSide
-  });
-  const startLine = new THREE.Mesh(startLineGeometry, startLineMaterial);
-  startLine.rotation.x = -Math.PI / 2;
-  startLine.position.set(0, 0.15, trackRadius);
-  scene.add(startLine);
-  
-  return { track, checkpoints, startLine };
-}
-
-function createFallbackKart() {
-  const kart = new THREE.Group();
-  
-  // Body
-  const bodyGeometry = new THREE.BoxGeometry(2, 0.5, 3);
-  const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0xff0000 });
-  const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-  body.castShadow = true;
-  kart.add(body);
-  
-  // Seat
-  const seatGeometry = new THREE.BoxGeometry(1.2, 0.8, 1.5);
-  const seatMaterial = new THREE.MeshLambertMaterial({ color: 0x0000ff });
-  const seat = new THREE.Mesh(seatGeometry, seatMaterial);
-  seat.position.set(0, 0.4, -0.3);
-  seat.castShadow = true;
-  kart.add(seat);
-  
-  // Wheels
-  const wheelGeometry = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 16);
-  const wheelMaterial = new THREE.MeshLambertMaterial({ color: 0x222222 });
-  
-  const wheelPositions = [
-    [-1, -0.3, 1.2],
-    [1, -0.3, 1.2],
-    [-1, -0.3, -1.2],
-    [1, -0.3, -1.2]
-  ];
-  
-  wheelPositions.forEach(pos => {
-    const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
-    wheel.rotation.z = Math.PI / 2;
-    wheel.position.set(...pos);
-    wheel.castShadow = true;
-    kart.add(wheel);
-  });
-  
-  return kart;
 }
 
 export default GamePage;
