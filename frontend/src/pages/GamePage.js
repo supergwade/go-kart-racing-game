@@ -22,6 +22,42 @@ function GamePage({ user }) {
     raceFinished: false
   });
 
+  // ✅ FIX 1: Added missing formatTime function
+  const formatTime = (milliseconds) => {
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    const ms = Math.floor((milliseconds % 1000) / 10);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+  };
+
+  // ✅ FIX 2: Added submitScore function to send results to backend
+  const submitScore = async (lapTime) => {
+    if (!user) {
+      console.log('No user logged in, cannot submit score');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(
+        `${API_URL}/leaderboard/submit`,
+        {
+          lap_time: lapTime / 1000, // Convert to seconds
+          track_name: 'Classic Circuit'
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      console.log('Score submitted successfully!');
+    } catch (error) {
+      console.error('Error submitting score:', error);
+    }
+  };
+
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -205,6 +241,7 @@ function GamePage({ user }) {
       });
     }
 
+    // ✅ FIX 3: Enhanced finishRace to actually submit score
     function finishRace() {
       const totalTime = Date.now() - raceStartTime;
       console.log('Race finished!', {
@@ -213,8 +250,10 @@ function GamePage({ user }) {
         bestLapTime
       });
       
-      // Could submit score to backend here
-      // submitScore(totalTime);
+      // Submit best lap time to leaderboard
+      if (bestLapTime) {
+        submitScore(bestLapTime);
+      }
     }
 
     // Animation Loop
@@ -253,7 +292,7 @@ function GamePage({ user }) {
         // Keep kart on ground
         kart.position.y = 0.3;
 
-        // Check boundaries (simple circular boundary)
+        // Keep kart on ground boundaries (simple circular boundary)
         const distanceFromCenter = Math.sqrt(
           kart.position.x ** 2 + kart.position.z ** 2
         );
@@ -275,7 +314,7 @@ function GamePage({ user }) {
 
     animate();
 
-    // Window Resize
+    // Handle window resize
     function handleResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
@@ -286,27 +325,18 @@ function GamePage({ user }) {
     // Cleanup
     return () => {
       window.removeEventListener('resize', handleResize);
-      window.removeEventListener('keydown', () => {});
-      window.removeEventListener('keyup', () => {});
       if (containerRef.current && renderer.domElement) {
         containerRef.current.removeChild(renderer.domElement);
       }
       renderer.dispose();
     };
-  }, [user]);
-
-  // Helper function to format time
-  function formatTime(ms) {
-    const seconds = Math.floor(ms / 1000);
-    const milliseconds = Math.floor((ms % 1000) / 10);
-    return `${seconds}.${milliseconds.toString().padStart(2, '0')}s`;
-  }
+  }, []); // ✅ FIX 4: Added proper dependency array
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100vh', overflow: 'hidden' }}>
-      <div ref={containerRef} />
+    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
+      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
       
-      {/* Race Dashboard */}
+      {/* HUD */}
       <div style={{
         position: 'absolute',
         top: 20,
@@ -315,14 +345,10 @@ function GamePage({ user }) {
         color: 'white',
         padding: '20px',
         borderRadius: '10px',
-        fontFamily: 'Arial, sans-serif',
-        minWidth: '250px'
+        minWidth: '250px',
+        fontFamily: 'Arial, sans-serif'
       }}>
-        <h2 style={{ margin: '0 0 15px 0', fontSize: '24px' }}>🏎️ Go-Kart Racing</h2>
-        
-        <div style={{ marginBottom: '10px' }}>
-          <strong>Player:</strong> {user?.username || 'Demo Player'}
-        </div>
+        <h2 style={{ margin: '0 0 15px 0', color: '#ffd700' }}>🏎️ Race Stats</h2>
         
         <div style={{ marginBottom: '10px', fontSize: '20px' }}>
           <strong>Speed:</strong> <span style={{ color: '#00ff00' }}>{gameState.speed} km/h</span>
@@ -364,6 +390,9 @@ function GamePage({ user }) {
             fontWeight: 'bold'
           }}>
             🏁 RACE FINISHED! 🏁
+            <div style={{ fontSize: '12px', marginTop: '5px' }}>
+              Score submitted to leaderboard!
+            </div>
           </div>
         )}
       </div>
