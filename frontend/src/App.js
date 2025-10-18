@@ -8,8 +8,9 @@ import LeaderboardPage from './pages/LeaderboardPage';
 import DashboardPage from './pages/DashboardPage';
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState(null);
+  // TEMPORARY: Auto-authenticate with demo user for testing
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
+  const [user, setUser] = useState({ id: 'demo-user', username: 'Demo Player', email: 'demo@example.com' });
 
   useEffect(() => {
     // Check if token exists in localStorage
@@ -19,6 +20,9 @@ function App() {
     if (token && savedUser) {
       setIsAuthenticated(true);
       setUser(JSON.parse(savedUser));
+    } else {
+      // Set demo user in localStorage for testing
+      localStorage.setItem('user', JSON.stringify({ id: 'demo-user', username: 'Demo Player', email: 'demo@example.com' }));
     }
   }, []);
 
@@ -50,17 +54,17 @@ function App() {
           />
           <Route 
             path="/game" 
-            element={isAuthenticated ? <GamePage user={user} /> : <Navigate to="/login" />} 
+            element={<GamePage user={user} />} 
           />
           <Route 
             path="/leaderboard" 
-            element={isAuthenticated ? <LeaderboardPage /> : <Navigate to="/login" />} 
+            element={<LeaderboardPage />} 
           />
           <Route 
             path="/dashboard" 
-            element={isAuthenticated ? <DashboardPage user={user} onLogout={handleLogout} /> : <Navigate to="/login" />} 
+            element={<DashboardPage user={user} onLogout={handleLogout} />} 
           />
-          <Route path="/" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />} />
+          <Route path="/" element={<Navigate to="/game" />} />
         </Routes>
       </div>
     </Router>
