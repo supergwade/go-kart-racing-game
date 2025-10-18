@@ -1,113 +1,73 @@
+const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
-const { getDatabase } = require('../config/database');
+const { generateToken } = require('../middleware/auth');
+const { query, get } = require('../config/db-helper');
 
-const submitScore = (req, res) => {
-  const userId = req.user.id;
-  const { lapTime, trackName = 'Main Track' } = req.body;
+const register = async (req, res) => {
+  const { username, email, password } = req.body;
 
-  if (!lapTime || lapTime <= 0) {
-    return res.status(400).json({ error: 'Valid lap time required' });
+  if (!username || !email || !password) {
+    return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  const scoreId = uuidv4();
-  const db = getDatabase();
+  try {
+    const hashedPassword = bcrypt.hashSync(password, 10);
+    const userId = uuidv4();
 
-  db.run(
-    'INSERT INTO leaderboard (id, user_id, lap_time, track_name) VALUES (?, ?, ?, ?)',
-    [scoreId, userId, lapTime, trackName],
-    (err) => {
-      if (err) {
-        return res.status(500).json({ error: 'Failed to submit score' });
-      }
+    await query(
+      'INSERT INTO users (id, username, email, password) VALUES (?, ?, ?, ?)',
+      [userId, username, email, hashedPassword]
+    );
 
-      // Check if user is in top 10 and award prize
-      checkAndAwardPrize(userId, lapTime);
-
-      res.status(201).json({
-        message: 'Score submitted successfully',
-        scoreId,
-        lapTime
-      });
+    const token = generateToken(userId);
+    res.status(201).json({
+      message: 'User registered successfully',
+      userId,
+      token,
+      user: { id: userId, username, email }
+    });
+  } catch (err) {
+    console.error('Registration error:', err);
+    if (err.message && (err.message.includes('UNIQUE') || err.message.includes('duplicate') || err.message.includes('unique'))) {
+      return res.status(400).json({ error: 'Username or email already exists' });
     }
-  );
+    return res.status(500).json({ error: 'Registration failed' });
+  }
 };
 
-const getLeaderboard = (req, res) => {
-  const limit = req.query.limit || 100;
-  const db = getDatabase();
+const login = async (req, res) => {
+  const { email, password } = req.body;
 
-  db.all(
-    `SELECT u.id, u.username, l.lap_time, l.track_name, l.created_at
-     FROM leaderboard l
-     JOIN users u ON l.user_id = u.id
-     ORDER BY l.lap_time ASC
-     LIMIT ?`,
-    [limit],
-    (err, rows) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password required' });
+  }
 
-      res.json({
-        leaderboard: rows || [],
-        count: (rows || []).length
-      });
+  try {
+    const user = await get('SELECT * FROM users WHERE email = ?', [email]);
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
-  );
-};
 
-const getUserScores = (req, res) => {
-  const userId = req.params.userId;
-  const db = getDatabase();
-
-  db.all(
-    `SELECT id, lap_time, track_name, created_at FROM leaderboard WHERE user_id = ? ORDER BY created_at DESC`,
-    [userId],
-    (err, rows) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      res.json({
-        scores: rows || [],
-        count: (rows || []).length
-      });
+    const passwordMatch = bcrypt.compareSync(password, user.password);
+    if (!passwordMatch) {
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
-  );
-};
 
-const checkAndAwardPrize = (userId, lapTime) => {
-  const db = getDatabase();
-
-  // Check if user is in top 10
-  db.get(
-    `SELECT COUNT(*) as rank FROM leaderboard WHERE lap_time < ?`,
-    [lapTime],
-    (err, result) => {
-      if (err) return;
-
-      const rank = result.rank + 1;
-      if (rank <= 10) {
-        // Award prize
-        const prizeId = uuidv4();
-        const prizeCode = `GOKART-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-
-        db.run(
-          'INSERT INTO prizes (id, user_id, prize_code, prize_type) VALUES (?, ?, ?, ?)',
-          [prizeId, userId, prizeCode, 'free_ride'],
-          (err) => {
-            if (!err) {
-              console.log(`🏆 Prize awarded to user ${userId}: ${prizeCode}`);
-            }
-          }
-        );
-      }
-    }
-  );
+    const token = generateToken(user.id);
+    res.json({
+      message: 'Login successful',
+      userId: user.id,
+      token,
+      user: { id: user.id, username: user.username, email: user.email }
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    return res.status(500).json({ error: 'Database error' });
+  }
 };
 
 module.exports = {
-  submitScore,
-  getLeaderboard,
-  getUserScores
+  register,
+  login
 };
