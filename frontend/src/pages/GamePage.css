@@ -1,0 +1,273 @@
+/* GamePage.css */
+
+/* Container for the entire game */
+.game-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #000;
+}
+
+/* 3D Canvas Container */
+.game-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+/* HUD (Heads Up Display) */
+.game-hud {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 20px;
+  border-radius: 12px;
+  min-width: 280px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+}
+
+.game-hud h2 {
+  margin: 0 0 15px 0;
+  color: #ffd700;
+  font-size: 24px;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.stat-row {
+  margin-bottom: 12px;
+  font-size: 16px;
+}
+
+.stat-label {
+  font-weight: bold;
+  display: inline-block;
+  min-width: 100px;
+}
+
+.speed-value {
+  color: #00ff00;
+  font-size: 20px;
+  font-weight: bold;
+  text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+}
+
+.lap-times-section {
+  margin-top: 15px;
+  border-top: 1px solid #666;
+  padding-top: 10px;
+}
+
+.lap-time-entry {
+  font-size: 14px;
+  padding: 2px 0;
+  font-family: 'Courier New', monospace;
+}
+
+.best-lap {
+  color: #ffd700;
+  font-weight: bold;
+}
+
+/* Race Finished Banner */
+.race-finished {
+  margin-top: 15px;
+  padding: 15px;
+  background: linear-gradient(135deg, #ffd700, #ffed4e);
+  color: #000;
+  border-radius: 8px;
+  text-align: center;
+  font-weight: bold;
+  font-size: 18px;
+  animation: pulse 1.5s ease-in-out infinite;
+  box-shadow: 0 4px 15px rgba(255, 215, 0, 0.5);
+}
+
+.race-finished-subtitle {
+  font-size: 12px;
+  margin-top: 5px;
+  font-weight: normal;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+/* Controls Display */
+.controls-display {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 15px;
+  border-radius: 10px;
+  font-size: 14px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.controls-display div {
+  padding: 3px 0;
+}
+
+.controls-title {
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: #ffd700;
+}
+
+/* Exit Button */
+.exit-button {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #ff4444, #cc0000);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.exit-button:hover {
+  background: linear-gradient(135deg, #ff6666, #ff0000);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 8px rgba(0, 0, 0, 0.4);
+}
+
+.exit-button:active {
+  transform: translateY(0);
+}
+
+/* Loading Screen */
+.loading-screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-size: 24px;
+  z-index: 1000;
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid #333;
+  border-top: 5px solid #ffd700;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Countdown Timer */
+.countdown {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 120px;
+  font-weight: bold;
+  color: #ffd700;
+  text-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
+  animation: countdown 1s ease-in-out;
+  z-index: 100;
+}
+
+@keyframes countdown {
+  0% {
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .game-hud {
+    min-width: 200px;
+    padding: 15px;
+    font-size: 14px;
+  }
+  
+  .game-hud h2 {
+    font-size: 18px;
+  }
+  
+  .controls-display {
+    font-size: 12px;
+    padding: 10px;
+  }
+  
+  .exit-button {
+    padding: 8px 16px;
+    font-size: 14px;
+  }
+}
+
+/* Checkpoint Indicator */
+.checkpoint-flash {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 48px;
+  font-weight: bold;
+  color: #00ff00;
+  animation: flash 0.5s ease-out;
+  pointer-events: none;
+  z-index: 50;
+}
+
+@keyframes flash {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(2);
+  }
+}
+
+/* Position Indicator */
+.position-indicator {
+  position: absolute;
+  top: 50%;
+  right: 40px;
+  transform: translateY(-50%);
+  font-size: 80px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.2);
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
